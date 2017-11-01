@@ -51,3 +51,4 @@ if __name__ == '__main__':
                 child.append(el_tpx)
 
     tree.write(args.output, xml_declaration=True, encoding='utf-8')
+    print('Wrote output XML to', args.output)
