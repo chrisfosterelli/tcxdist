@@ -15,7 +15,12 @@ date_str = '%Y-%m-%dT%H:%M:%S.%fZ'
 ns1 = '{http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2}'
 ns2 = '{http://www.garmin.com/xmlschemas/ActivityExtension/v2}'
 
-def get_time(trackpoint):
+def get_lap_length(lap):
+    for child in lap:
+        if child.tag == '{:s}TotalTimeSeconds'.format(ns1):
+            return float(child.text)
+
+def get_trackpoint_datetime(trackpoint):
     for child in trackpoint:
         if child.tag == '{:s}Time'.format(ns1):
             return datetime.datetime.strptime(child.text, date_str)
@@ -27,26 +32,32 @@ if __name__ == '__main__':
     tree = etree.parse(args.input)
     distance = float(args.km) * 1000
 
-    laps = tree.find('//{:s}Lap'.format(ns1))
+    laps = tree.findall('//{:s}Lap'.format(ns1))
     trackpoints = tree.findall('//{:s}Trackpoint'.format(ns1))
 
-    start, end = get_time(trackpoints[0]), get_time(trackpoints[-1])
-    length = (end - start).total_seconds()
+    start = get_trackpoint_datetime(trackpoints[0])
+    end = get_trackpoint_datetime(trackpoints[-1])
+    total_length = (end - start).total_seconds()
 
     for lap in laps:
-        if lap.tag == '{:s}DistanceMeters'.format(ns1):
-            lap.text = '{:.4f}'.format(float(args.km))
+        lap_length = get_lap_length(lap)
+        for child in lap:
+            if child.tag == '{:s}DistanceMeters'.format(ns1):
+                child.text = '{:.4f}'.format(
+                    lap_length / total_length * distance
+                )
 
     for trackpoint in trackpoints:
-        time = get_time(trackpoint)
+        timestamp = get_trackpoint_datetime(trackpoint)
         for child in trackpoint:
             if child.tag == '{:s}DistanceMeters'.format(ns1):
-                cur_dist = ((time - start).total_seconds()) / length * distance
+                cur_length = (timestamp - start).total_seconds()
+                cur_dist = cur_length / total_length * distance
                 child.text = '{:.4f}'.format(cur_dist)
             if child.tag == '{:s}Extensions'.format(ns1):
                 el_tpx = etree.Element('{:s}TPX'.format(ns2))
                 el_speed = etree.SubElement(el_tpx, '{:s}Speed'.format(ns2))
-                el_speed.text = '{:.4f}'.format(distance / length)
+                el_speed.text = '{:.4f}'.format(distance / total_length)
                 child.remove(child[0])
                 child.append(el_tpx)
 
